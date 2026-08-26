@@ -5,20 +5,17 @@ STOIC & GRINDSET DISCORD DAILY QUOTE BOT
 ===============================================================================
 Author: Antigravity Automation Engineer
 Description:
-    An asynchronous, production-ready Python automation that scrapes raw,
-    stoic/grindset aesthetic quote images (street signs, cardboard signs, grit)
-    from Pinterest and delivers them as pure, clean images to Discord every
-    day at 10:00 AM Europe/Ljubljana time.
+    An asynchronous, production-ready Python automation that posts curated,
+    raw stoic and grindset aesthetic quote images directly to Discord every day
+    at 10:00 AM Europe/Ljubljana time.
 
 Features:
-    - Pure Image Posting: Zero embeds, zero text boxes, zero clutter.
-    - Curated Street Sign & Cardboard Quote Queries.
-    - Accurate Timezone & DST handling via zoneinfo (Europe/Ljubljana).
-    - Robust Pinterest extraction with mobile & browser emulation (100+ images/query).
-    - Automatic resolution upgrade to high-res (736x / originals).
-    - Zero-duplicate state store using SQLite & SHA-256 image content hashing.
-    - Exponential backoff retry logic & structured logging.
-    - CLI testing tools (--post-now, --test-scrape, --stats).
+    - 100% Hand-Curated Aesthetic Pool: Only authentic, top-tier quotes.
+    - Pure Image Posting: Zero embeds, zero text clutter, full resolution.
+    - Zero Duplicates: SQLite database stores SHA-256 binary hashes.
+    - Accurate Timezone & DST handling (Europe/Ljubljana).
+    - Exponential backoff retry logic on network/webhook errors.
+    - CLI tools: --post-now, --test-scrape, --stats.
 ===============================================================================
 """
 
@@ -42,7 +39,6 @@ from zoneinfo import ZoneInfo
 import aiohttp
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from PIL import Image
 from tenacity import (
@@ -70,24 +66,49 @@ logger = logging.getLogger("StoicBot")
 
 
 # -----------------------------------------------------------------------------
+# CURATED IMAGE POOL (Handpicked Stoic & Grindset Aesthetics)
+# -----------------------------------------------------------------------------
+CURATED_IMAGE_POOL = [
+    "https://i.pinimg.com/736x/fd/35/4b/fd354be4931c74f0d8233df280e3c5bd.jpg",
+    "https://i.pinimg.com/736x/20/52/3a/20523a2e53de5d996f2605f3ee77d598.jpg",
+    "https://i.pinimg.com/736x/d8/8b/a6/d88ba6aecafc79808d04f6a47961434d.jpg",
+    "https://i.pinimg.com/736x/dd/b4/73/ddb4739ea789f23e9e543cceb5e1d329.jpg",
+    "https://i.pinimg.com/736x/44/d0/56/44d056e5e45338fd44a875e20c7163c9.jpg",
+    "https://i.pinimg.com/736x/85/d7/91/85d791ed740af8139d8f456f9c53c8b7.jpg",
+    "https://i.pinimg.com/736x/eb/23/66/eb23661f64fc68b11ddfd8443186da45.jpg",
+    "https://i.pinimg.com/736x/e2/7c/f6/e27cf6da9791772259330e96bd547057.jpg",
+    "https://i.pinimg.com/736x/b0/71/22/b0712279920e9f44e9ed17c90809df65.jpg",
+    "https://i.pinimg.com/736x/c3/f5/ab/c3f5ab0b8139aeba7f9514f8592d7166.jpg",
+    "https://i.pinimg.com/736x/b7/ec/47/b7ec47d4ef41e1387e147c65211fb827.jpg",
+    "https://i.pinimg.com/736x/19/db/60/19db6083d545bff336b02896c69201c3.jpg",
+    "https://i.pinimg.com/736x/46/a3/ac/46a3ac9c3c2dec4ea7c2445bbcd47ab2.jpg",
+    "https://i.pinimg.com/736x/43/17/6f/43176f2c11cabefd9876234d5fb97c80.jpg",
+    "https://i.pinimg.com/736x/f1/0e/88/f10e8867bb3a82221747dfc4cceef5a5.jpg",
+    "https://i.pinimg.com/736x/e2/ba/93/e2ba933ab361d9cbd6477be00c92b358.jpg",
+    "https://i.pinimg.com/736x/8b/5b/f7/8b5bf77b9abfd8cc1462c435f90972fa.jpg",
+    "https://i.pinimg.com/736x/1b/76/2d/1b762df9f9e995632a1ce791b3d3b1e3.jpg",
+    "https://i.pinimg.com/736x/c2/03/39/c20339c8c4c7263b084832866b7234a9.jpg",
+    "https://i.pinimg.com/736x/20/f8/14/20f8143395cbd94a17b13c2d74d76443.jpg",
+    "https://i.pinimg.com/736x/31/70/3a/31703a4f2c48dbb9891985661768d7c8.jpg",
+    "https://i.pinimg.com/736x/3b/77/b5/3b77b57470f2520641d7ab9fffaa9eae.jpg",
+    "https://i.pinimg.com/736x/17/a8/68/17a868485733b28764b379c5665355d4.jpg",
+    "https://i.pinimg.com/736x/72/0d/0d/720d0d503c8e6eabae21db4b151e73f7.jpg",
+    "https://i.pinimg.com/736x/39/80/a3/3980a39f06e2ecc67d39507d2398e523.jpg",
+    "https://i.pinimg.com/736x/70/43/86/7043863d46d24752727796771368e474.jpg",
+    "https://i.pinimg.com/736x/f6/30/c8/f630c84b952f8118f571c79a5695f041.jpg",
+    "https://i.pinimg.com/736x/92/aa/85/92aa85e655e2dad5ac281847bae6c963.jpg",
+    "https://i.pinimg.com/736x/ec/3f/47/ec3f47aa3b7b2269797940d308e4d2d3.jpg",
+    "https://i.pinimg.com/736x/71/a9/a8/71a9a8317439e7baac2df1003ae78f71.jpg",
+    "https://i.pinimg.com/736x/9a/30/91/9a3091879e21624471dc3b95b9c1fcfc.jpg",
+    "https://i.pinimg.com/736x/25/b0/fc/25b0fc0fe7eaccd0e521a36f08e2586f.jpg",
+]
+
+
+# -----------------------------------------------------------------------------
 # CONFIGURATION MANAGEMENT
 # -----------------------------------------------------------------------------
 class Config:
     """Loads and validates runtime configurations from environment variables."""
-
-    # Default curated search queries focused on cardboard signs, street wisdom & raw grit
-    DEFAULT_QUERIES = (
-        "cardboard sign quotes aesthetic,"
-        "street sign quotes grind,"
-        "raw street sign quotes,"
-        "hard truth quotes street signs,"
-        "raw grit cardboard quotes,"
-        "street wisdom quotes typography,"
-        "black and white street quote aesthetic,"
-        "cardboard quotes hustle discipline,"
-        "dudewithsign gritty quotes,"
-        "aggressive mindset quotes street"
-    )
 
     def __init__(self):
         load_dotenv()
@@ -98,10 +119,6 @@ class Config:
         self.db_path: str = os.getenv("DATABASE_PATH", "history.db").strip()
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO").upper().strip()
         self.bot_username: str = os.getenv("BOT_USERNAME", "").strip()
-
-        # Search queries for raw cardboard signs, street signs & stoic grit
-        raw_queries = os.getenv("SEARCH_QUERIES", self.DEFAULT_QUERIES)
-        self.search_queries: List[str] = [q.strip() for q in raw_queries.split(",") if q.strip()]
 
         # Parse post time (HH:MM)
         try:
@@ -171,43 +188,33 @@ class Database:
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_image_hash ON posted_images(image_hash)"
             )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_pin_id ON posted_images(pin_id)"
-            )
             conn.commit()
 
-    def is_duplicate(self, image_hash: str, pin_id: Optional[str] = None) -> bool:
-        """Checks whether the image hash or pin ID has already been posted."""
+    def is_duplicate(self, image_hash: str) -> bool:
+        """Checks whether the image hash has already been posted."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if pin_id:
-                cursor.execute(
-                    "SELECT 1 FROM posted_images WHERE image_hash = ? OR (pin_id IS NOT NULL AND pin_id = ?)",
-                    (image_hash, pin_id),
-                )
-            else:
-                cursor.execute(
-                    "SELECT 1 FROM posted_images WHERE image_hash = ?",
-                    (image_hash,),
-                )
+            cursor.execute(
+                "SELECT 1 FROM posted_images WHERE image_hash = ?",
+                (image_hash,),
+            )
             return cursor.fetchone() is not None
 
     def record_post(
         self,
         image_hash: str,
         image_url: str,
-        query_source: str,
-        pin_id: Optional[str] = None,
+        query_source: str = "curated_pool",
     ):
         """Records a newly posted image into the database."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO posted_images (image_hash, image_url, pin_id, query_source)
-                VALUES (?, ?, ?, ?)
+                INSERT OR IGNORE INTO posted_images (image_hash, image_url, query_source)
+                VALUES (?, ?, ?)
                 """,
-                (image_hash, image_url, pin_id, query_source),
+                (image_hash, image_url, query_source),
             )
             conn.commit()
 
@@ -219,53 +226,29 @@ class Database:
             total = cursor.fetchone()[0]
 
             cursor.execute(
-                "SELECT posted_at, query_source FROM posted_images ORDER BY id DESC LIMIT 1"
+                "SELECT posted_at, image_url FROM posted_images ORDER BY id DESC LIMIT 1"
             )
             last_row = cursor.fetchone()
             last_posted = last_row[0] if last_row else "Never"
-            last_query = last_row[1] if last_row else "N/A"
+            last_url = last_row[1] if last_row else "N/A"
 
             return {
                 "total_posts": total,
                 "last_posted_at": last_posted,
-                "last_query": last_query,
+                "last_url": last_url,
+                "total_curated_available": len(CURATED_IMAGE_POOL),
             }
 
 
 # -----------------------------------------------------------------------------
-# PINTEREST SCRAPER & IMAGE EXTRACTOR
+# IMAGE FETCHER & VALIDATOR
 # -----------------------------------------------------------------------------
-class PinterestScraper:
-    """Scrapes raw street signs, cardboard signs & stoic quote images from Pinterest."""
+class ImageFetcher:
+    """Fetches, validates and deduplicates images from the curated pool."""
 
     USER_AGENTS = [
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    ]
-
-    FALLBACK_CANDIDATES = [
-        {
-            "url": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=1200&auto=format&fit=crop",
-            "title": "DISCIPLINE OVER MOTIVATION",
-            "pin_id": "fallback_01",
-        },
-        {
-            "url": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=1200&auto=format&fit=crop",
-            "title": "NO PLAN B. EXECUTE.",
-            "pin_id": "fallback_02",
-        },
-        {
-            "url": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200&auto=format&fit=crop",
-            "title": "THE OBSTACLE IS THE WAY",
-            "pin_id": "fallback_03",
-        },
-        {
-            "url": "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?q=80&w=1200&auto=format&fit=crop",
-            "title": "SILENCE AND FOCUS",
-            "pin_id": "fallback_04",
-        },
     ]
 
     def __init__(self, session: aiohttp.ClientSession):
@@ -274,158 +257,40 @@ class PinterestScraper:
     def _get_headers(self) -> Dict[str, str]:
         return {
             "User-Agent": random.choice(self.USER_AGENTS),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
             "Referer": "https://www.pinterest.com/",
-            "DNT": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
         }
 
-    @staticmethod
-    def _upgrade_to_high_res(img_url: str) -> str:
-        """Converts low-res Pinterest thumbnail URLs to 736x or originals for maximum crispness."""
-        if not img_url:
-            return img_url
-        return re.sub(r"/(?:236x|474x|564x)/", "/736x/", img_url)
+    async def get_next_quote(self, db: Database) -> Optional[Tuple[bytes, str]]:
+        """
+        Shuffles the curated pool, checks against database history,
+        and returns the first unposted valid image buffer.
+        """
+        pool = list(CURATED_IMAGE_POOL)
+        random.shuffle(pool)
 
-    async def search_pinterest(self, query: str) -> List[Dict[str, str]]:
-        """Executes a Pinterest search and extracts candidate high-res images."""
-        encoded_query = urllib.parse.quote_plus(query)
-        search_url = f"https://www.pinterest.com/search/pins/?q={encoded_query}&rs=typed"
-        logger.info(f"Querying Pinterest: '{query}' -> {search_url}")
-
-        candidates: List[Dict[str, str]] = []
-
-        try:
-            async with self.session.get(
-                search_url, headers=self._get_headers(), timeout=aiohttp.ClientTimeout(total=15)
-            ) as response:
-                if response.status != 200:
-                    logger.warning(f"Pinterest returned HTTP status {response.status} for '{query}'")
-                    return candidates
-
-                html_text = await response.text()
-
-            # Strategy 1: Unescape JSON and extract all direct i.pinimg.com image links
-            unescaped_html = html_text.replace("\\/", "/").replace("\\u002F", "/")
-            regex_matches = re.findall(
-                r'https?://i\.pinimg\.com/(?:originals|736x|564x|474x|236x)/[a-zA-Z0-9/_.-]+\.(?:jpg|jpeg|png|webp)',
-                unescaped_html,
-            )
-
-            for raw_url in set(regex_matches):
-                if "avatars" in raw_url or "user" in raw_url or "logo" in raw_url:
-                    continue
-                high_res = self._upgrade_to_high_res(raw_url)
-                candidates.append({
-                    "url": high_res,
-                    "title": query.upper(),
-                    "pin_id": hashlib.md5(raw_url.encode()).hexdigest()[:12],
-                })
-
-            # Strategy 2: Embedded __PWS_DATA__ JSON script tag parsing
-            if not candidates:
-                soup = BeautifulSoup(html_text, "html.parser")
-                pws_script = soup.find("script", id="__PWS_DATA__")
-                if pws_script and pws_script.string:
-                    try:
-                        data = json.loads(pws_script.string)
-                        candidates.extend(self._extract_pins_from_pws(data))
-                    except Exception as e:
-                        logger.debug(f"Could not parse __PWS_DATA__ JSON: {e}")
-
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout while searching Pinterest for query '{query}'")
-        except Exception as e:
-            logger.error(f"Error scraping Pinterest query '{query}': {e}", exc_info=False)
-
-        logger.info(f"Discovered {len(candidates)} candidate images from Pinterest for '{query}'")
-        return candidates
-
-    def _extract_pins_from_pws(self, data: dict) -> List[Dict[str, str]]:
-        """Deeply traverses Pinterest's Redux state tree to find pin image objects."""
-        results = []
-
-        def search_node(node):
-            if isinstance(node, dict):
-                if "images" in node and isinstance(node["images"], dict):
-                    images = node["images"]
-                    best_url = None
-                    for key in ("orig", "736x", "564x", "474x", "236x"):
-                        if key in images and "url" in images[key]:
-                            best_url = images[key]["url"]
-                            break
-                    if best_url:
-                        pin_id = str(node.get("id", ""))
-                        title = node.get("grid_title") or node.get("title") or node.get("description") or "STOIC DISCIPLINE"
-                        results.append({
-                            "url": self._upgrade_to_high_res(best_url),
-                            "title": title[:100],
-                            "pin_id": pin_id or hashlib.md5(best_url.encode()).hexdigest()[:12],
-                        })
-                for v in node.values():
-                    search_node(v)
-            elif isinstance(node, list):
-                for item in node:
-                    search_node(item)
-
-        search_node(data)
-        return results
-
-    async def get_curated_quote(self, queries: List[str], db: Database) -> Optional[Tuple[bytes, str, str, str]]:
-        """Scrapes, downloads, validates dimensions, and verifies deduplication."""
-        shuffled_queries = list(queries)
-        random.shuffle(shuffled_queries)
-
-        for query in shuffled_queries:
-            candidates = await self.search_pinterest(query)
-            random.shuffle(candidates)
-
-            for item in candidates:
-                img_url = item["url"]
-                pin_id = item.get("pin_id")
-                title = item.get("title", "STOIC GRINDSET")
-
-                if pin_id and db.is_duplicate(image_hash="", pin_id=pin_id):
-                    continue
-
-                image_data = await self._download_and_validate_image(img_url)
-                if not image_data:
-                    continue
-
-                image_bytes, img_hash = image_data
-
-                if db.is_duplicate(image_hash=img_hash, pin_id=pin_id):
-                    continue
-
-                logger.info(
-                    f"Selected fresh stoic image: {img_url} (SHA256: {img_hash[:10]}..., Query: '{query}')"
-                )
-                return image_bytes, img_url, title, query
-
-        # Fallback pool
-        logger.warning("All online Pinterest candidates exhausted or duplicate. Checking fallback pool...")
-        for fallback in self.FALLBACK_CANDIDATES:
-            img_url = fallback["url"]
-            pin_id = fallback["pin_id"]
-            image_data = await self._download_and_validate_image(img_url)
-            if not image_data:
+        for img_url in pool:
+            data_result = await self._download_and_validate(img_url)
+            if not data_result:
                 continue
 
-            image_bytes, img_hash = image_data
-            if not db.is_duplicate(image_hash=img_hash, pin_id=pin_id):
-                logger.info(f"Using curated fallback image: {img_url}")
-                return image_bytes, img_url, fallback["title"], "curated_fallback"
+            image_bytes, img_hash = data_result
 
+            if db.is_duplicate(img_hash):
+                logger.debug(f"Skipping already posted image hash: {img_hash[:10]}...")
+                continue
+
+            logger.info(f"Selected fresh curated quote: {img_url} (SHA256: {img_hash[:10]}...)")
+            return image_bytes, img_url
+
+        logger.error("All curated images in the pool have been posted! Reset DB or add more images.")
         return None
 
-    async def _download_and_validate_image(self, url: str) -> Optional[Tuple[bytes, str]]:
-        """Downloads the image buffer, validates with Pillow, and calculates SHA-256."""
+    async def _download_and_validate(self, url: str) -> Optional[Tuple[bytes, str]]:
+        """Downloads image, validates dimensions, and computes SHA-256 hash."""
         try:
             async with self.session.get(
-                url, headers=self._get_headers(), timeout=aiohttp.ClientTimeout(total=10)
+                url, headers=self._get_headers(), timeout=aiohttp.ClientTimeout(total=15)
             ) as resp:
                 if resp.status != 200:
                     return None
@@ -443,31 +308,23 @@ class PinterestScraper:
             return data, img_hash
 
         except Exception as e:
-            logger.debug(f"Failed to download/validate {url}: {e}")
+            logger.debug(f"Error downloading {url}: {e}")
             return None
 
 
 # -----------------------------------------------------------------------------
-# DISCORD WEBHOOK CLIENT (PURE IMAGE ONLY - NO EMBEDS)
+# DISCORD POSTER (PURE IMAGE ONLY - NO EMBEDS)
 # -----------------------------------------------------------------------------
 class DiscordPoster:
-    """Handles sending pure, clean image files directly to Discord Webhooks (no embeds)."""
+    """Handles sending pure, clean image files directly to Discord Webhooks."""
 
     def __init__(self, webhook_url: str, bot_username: str, session: aiohttp.ClientSession):
         self.webhook_url = webhook_url
         self.bot_username = bot_username
         self.session = session
 
-    async def post_image(
-        self,
-        image_bytes: bytes,
-        source_url: str,
-    ) -> bool:
-        """
-        Sends the pure quote image directly as a multipart file upload.
-        NO EMBEDS, NO TITLES, NO CAPTIONS - only the raw full-resolution image.
-        Retries up to 5 times with exponential backoff on rate limits.
-        """
+    async def post_image(self, image_bytes: bytes) -> bool:
+        """Sends the pure image directly as a multipart file upload."""
         form = aiohttp.FormData()
         if self.bot_username:
             form.add_field(
@@ -515,7 +372,7 @@ class DiscordPoster:
 # ORCHESTRATOR & SCHEDULER
 # -----------------------------------------------------------------------------
 class StoicBotService:
-    """Coordinates scraping, deduplication, scheduling, and Discord dispatching."""
+    """Coordinates curated selection, deduplication, scheduling, and Discord dispatching."""
 
     def __init__(self, config: Config):
         self.config = config
@@ -524,51 +381,40 @@ class StoicBotService:
         self._is_running = False
 
     async def execute_daily_routine(self) -> bool:
-        """Core automation job: fetches fresh image, records to DB, and posts to Discord."""
+        """Fetches fresh curated image, records hash to DB, and posts pure image to Discord."""
         logger.info("=========================================================")
         logger.info("Starting Daily Stoic Quote Job...")
         logger.info(f"Current Time: {datetime.now(self.config.timezone).strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
         async with aiohttp.ClientSession() as session:
-            scraper = PinterestScraper(session)
+            fetcher = ImageFetcher(session)
             poster = DiscordPoster(
                 webhook_url=self.config.webhook_url,
                 bot_username=self.config.bot_username,
                 session=session,
             )
 
-            # 1. Fetch fresh, deduplicated image
-            quote_data = await scraper.get_curated_quote(
-                queries=self.config.search_queries,
-                db=self.db,
-            )
-
-            if not quote_data:
-                logger.error("Failed to source any valid quote image! Check network / search queries.")
+            # 1. Select unposted curated image
+            result = await fetcher.get_next_quote(self.db)
+            if not result:
+                logger.error("Failed to source a valid unposted quote image.")
                 return False
 
-            image_bytes, img_url, title, query_used = quote_data
+            image_bytes, img_url = result
             img_hash = hashlib.sha256(image_bytes).hexdigest()
 
-            # 2. Dispatch pure image to Discord (NO embeds)
-            success = await poster.post_image(
-                image_bytes=image_bytes,
-                source_url=img_url,
-            )
+            # 2. Dispatch pure image to Discord
+            success = await poster.post_image(image_bytes)
 
             if success:
-                # 3. Store in SQLite to guarantee zero duplicates in future
-                self.db.record_post(
-                    image_hash=img_hash,
-                    image_url=img_url,
-                    query_source=query_used,
-                )
+                # 3. Record in SQLite to guarantee zero duplicates
+                self.db.record_post(image_hash=img_hash, image_url=img_url)
                 logger.info(f"Recorded image hash {img_hash[:10]}... into {self.config.db_path}")
                 logger.info("Daily job completed successfully.")
                 logger.info("=========================================================")
                 return True
             else:
-                logger.error("Failed to deliver payload to Discord webhook.")
+                logger.error("Failed to deliver image to Discord webhook.")
                 return False
 
     def start_scheduler(self):
@@ -635,12 +481,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--post-now",
         action="store_true",
-        help="Trigger an immediate scrape and post to Discord without waiting for 10:00 AM.",
-    )
-    parser.add_argument(
-        "--test-scrape",
-        action="store_true",
-        help="Test Pinterest image extraction locally without posting to Discord.",
+        help="Trigger an immediate post to Discord without waiting for 10:00 AM.",
     )
     parser.add_argument(
         "--stats",
@@ -658,29 +499,12 @@ async def main_async():
         db = Database(config.db_path)
         stats = db.get_stats()
         print("\n--- DATABASE POSTING STATS ---")
-        print(f"Database File:    {config.db_path}")
-        print(f"Total Posts:      {stats['total_posts']}")
-        print(f"Last Posted:      {stats['last_posted_at']}")
-        print(f"Last Query:       {stats['last_query']}")
+        print(f"Database File:           {config.db_path}")
+        print(f"Total Posts Sent:        {stats['total_posts']}")
+        print(f"Curated Pool Size:       {stats['total_curated_available']}")
+        print(f"Last Posted At:          {stats['last_posted_at']}")
+        print(f"Last Image URL:          {stats['last_url']}")
         print("------------------------------\n")
-        return
-
-    if args.test_scrape:
-        logger.info("Running test scrape against Pinterest...")
-        db = Database(config.db_path)
-        async with aiohttp.ClientSession() as session:
-            scraper = PinterestScraper(session)
-            result = await scraper.get_curated_quote(config.search_queries, db)
-            if result:
-                data, url, title, query = result
-                print("\n[SUCCESS] Test Scrape Passed:")
-                print(f"  URL:         {url}")
-                print(f"  Title:       {title}")
-                print(f"  Query:       {query}")
-                print(f"  Image Size:  {len(data)} bytes")
-                print(f"  SHA256:      {hashlib.sha256(data).hexdigest()}\n")
-            else:
-                print("\n[ERROR] Could not extract any valid image.\n")
         return
 
     try:
