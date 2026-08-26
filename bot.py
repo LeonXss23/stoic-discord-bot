@@ -6,15 +6,17 @@ STOIC & GRINDSET DISCORD DAILY QUOTE BOT
 Author: Antigravity Automation Engineer
 Description:
     An asynchronous, production-ready Python automation that scrapes raw,
-    stoic/grindset aesthetic quote images from Pinterest and delivers them
-    to a designated Discord channel every day at 10:00 AM Europe/Ljubljana time.
+    stoic/grindset aesthetic quote images (street signs, cardboard signs, grit)
+    from Pinterest and delivers them as pure, clean images to Discord every
+    day at 10:00 AM Europe/Ljubljana time.
 
 Features:
+    - Pure Image Posting: Zero embeds, zero text boxes, zero clutter.
+    - Curated Street Sign & Cardboard Quote Queries.
     - Accurate Timezone & DST handling via zoneinfo (Europe/Ljubljana).
     - Robust Pinterest extraction with mobile & browser emulation (100+ images/query).
     - Automatic resolution upgrade to high-res (736x / originals).
     - Zero-duplicate state store using SQLite & SHA-256 image content hashing.
-    - Discord Webhook integration with clean matte-dark embedded styling.
     - Exponential backoff retry logic & structured logging.
     - CLI testing tools (--post-now, --test-scrape, --stats).
 ===============================================================================
@@ -73,6 +75,20 @@ logger = logging.getLogger("StoicBot")
 class Config:
     """Loads and validates runtime configurations from environment variables."""
 
+    # Default curated search queries focused on cardboard signs, street wisdom & raw grit
+    DEFAULT_QUERIES = (
+        "cardboard sign quotes aesthetic,"
+        "street sign quotes grind,"
+        "raw street sign quotes,"
+        "hard truth quotes street signs,"
+        "raw grit cardboard quotes,"
+        "street wisdom quotes typography,"
+        "black and white street quote aesthetic,"
+        "cardboard quotes hustle discipline,"
+        "dudewithsign gritty quotes,"
+        "aggressive mindset quotes street"
+    )
+
     def __init__(self):
         load_dotenv()
 
@@ -83,23 +99,8 @@ class Config:
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO").upper().strip()
         self.bot_username: str = os.getenv("BOT_USERNAME", "STOIC // DAILY GRIND").strip()
 
-        # Parse embed color (e.g. 0x111111 or #111111)
-        raw_color = os.getenv("EMBED_COLOR", "0x111111").strip()
-        try:
-            if raw_color.startswith("#"):
-                self.embed_color = int(raw_color[1:], 16)
-            elif raw_color.startswith("0x") or raw_color.startswith("0X"):
-                self.embed_color = int(raw_color, 16)
-            else:
-                self.embed_color = int(raw_color, 16)
-        except ValueError:
-            self.embed_color = 0x111111
-
-        # Search queries for gritty stoic & grindset quotes
-        raw_queries = os.getenv(
-            "SEARCH_QUERIES",
-            "stoic quotes black and white,grind mindset signs,raw masculine wisdom aesthetic,raw street sign stoic quotes,discipline grindset black white",
-        )
+        # Search queries for raw cardboard signs, street signs & stoic grit
+        raw_queries = os.getenv("SEARCH_QUERIES", self.DEFAULT_QUERIES)
         self.search_queries: List[str] = [q.strip() for q in raw_queries.split(",") if q.strip()]
 
         # Parse post time (HH:MM)
@@ -235,9 +236,8 @@ class Database:
 # PINTEREST SCRAPER & IMAGE EXTRACTOR
 # -----------------------------------------------------------------------------
 class PinterestScraper:
-    """Scrapes raw stoic & grindset aesthetic quote images from Pinterest."""
+    """Scrapes raw street signs, cardboard signs & stoic quote images from Pinterest."""
 
-    # Emulates modern mobile and desktop client headers to retrieve full pin feeds
     USER_AGENTS = [
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
         "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
@@ -245,7 +245,6 @@ class PinterestScraper:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
     ]
 
-    # Curated fallback pool of gritty black & white stoic quotes in case of upstream rate-limiting
     FALLBACK_CANDIDATES = [
         {
             "url": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=1200&auto=format&fit=crop",
@@ -289,18 +288,10 @@ class PinterestScraper:
         """Converts low-res Pinterest thumbnail URLs to 736x or originals for maximum crispness."""
         if not img_url:
             return img_url
-        # Replace 236x, 474x, 564x with 736x or originals
-        high_res = re.sub(r"/(?:236x|474x|564x)/", "/736x/", img_url)
-        return high_res
+        return re.sub(r"/(?:236x|474x|564x)/", "/736x/", img_url)
 
     async def search_pinterest(self, query: str) -> List[Dict[str, str]]:
-        """
-        Executes a Pinterest search and extracts candidate images using multiple
-        parsing strategies:
-          1. Direct image pattern extraction from server-rendered search HTML.
-          2. Embedded __PWS_DATA__ JSON script tag (Redux state tree).
-          3. DOM <img> tags and meta tags.
-        """
+        """Executes a Pinterest search and extracts candidate high-res images."""
         encoded_query = urllib.parse.quote_plus(query)
         search_url = f"https://www.pinterest.com/search/pins/?q={encoded_query}&rs=typed"
         logger.info(f"Querying Pinterest: '{query}' -> {search_url}")
@@ -312,9 +303,7 @@ class PinterestScraper:
                 search_url, headers=self._get_headers(), timeout=aiohttp.ClientTimeout(total=15)
             ) as response:
                 if response.status != 200:
-                    logger.warning(
-                        f"Pinterest returned HTTP status {response.status} for query '{query}'"
-                    )
+                    logger.warning(f"Pinterest returned HTTP status {response.status} for '{query}'")
                     return candidates
 
                 html_text = await response.text()
@@ -327,7 +316,6 @@ class PinterestScraper:
             )
 
             for raw_url in set(regex_matches):
-                # Filter out tiny icon avatars or logos
                 if "avatars" in raw_url or "user" in raw_url or "logo" in raw_url:
                     continue
                 high_res = self._upgrade_to_high_res(raw_url)
@@ -357,7 +345,7 @@ class PinterestScraper:
         return candidates
 
     def _extract_pins_from_pws(self, data: dict) -> List[Dict[str, str]]:
-        """Deeply traverses Pinterest's internal Redux state tree to find pin image objects."""
+        """Deeply traverses Pinterest's Redux state tree to find pin image objects."""
         results = []
 
         def search_node(node):
@@ -387,14 +375,7 @@ class PinterestScraper:
         return results
 
     async def get_curated_quote(self, queries: List[str], db: Database) -> Optional[Tuple[bytes, str, str, str]]:
-        """
-        Iterates through queries, scrapes candidates, downloads images,
-        verifies quality and aspect ratio, and checks for database deduplication.
-
-        Returns:
-            Tuple of (image_bytes, image_url, pin_title, query_used) or None if all fail.
-        """
-        # Shuffle queries to ensure daily theme variety
+        """Scrapes, downloads, validates dimensions, and verifies deduplication."""
         shuffled_queries = list(queries)
         random.shuffle(shuffled_queries)
 
@@ -407,21 +388,16 @@ class PinterestScraper:
                 pin_id = item.get("pin_id")
                 title = item.get("title", "STOIC GRINDSET")
 
-                # Quick pre-check on pin_id if available
                 if pin_id and db.is_duplicate(image_hash="", pin_id=pin_id):
-                    logger.debug(f"Skipping known pin_id: {pin_id}")
                     continue
 
-                # Download image and validate dimensions
                 image_data = await self._download_and_validate_image(img_url)
                 if not image_data:
                     continue
 
                 image_bytes, img_hash = image_data
 
-                # Content-based hash deduplication check
                 if db.is_duplicate(image_hash=img_hash, pin_id=pin_id):
-                    logger.debug(f"Skipping duplicate image content hash: {img_hash[:10]}...")
                     continue
 
                 logger.info(
@@ -429,7 +405,7 @@ class PinterestScraper:
                 )
                 return image_bytes, img_url, title, query
 
-        # Fallback pool if all Pinterest scraping results were duplicates or blocked
+        # Fallback pool
         logger.warning("All online Pinterest candidates exhausted or duplicate. Checking fallback pool...")
         for fallback in self.FALLBACK_CANDIDATES:
             img_url = fallback["url"]
@@ -446,7 +422,7 @@ class PinterestScraper:
         return None
 
     async def _download_and_validate_image(self, url: str) -> Optional[Tuple[bytes, str]]:
-        """Downloads the image buffer, validates image format/dimensions with Pillow, and calculates SHA-256."""
+        """Downloads the image buffer, validates with Pillow, and calculates SHA-256."""
         try:
             async with self.session.get(
                 url, headers=self._get_headers(), timeout=aiohttp.ClientTimeout(total=10)
@@ -455,10 +431,9 @@ class PinterestScraper:
                     return None
                 data = await resp.read()
 
-            if len(data) < 5000:  # Skip tiny/empty responses (< 5KB)
+            if len(data) < 5000:
                 return None
 
-            # Validate image with Pillow (ensures minimum dimensions so tiny icons are excluded)
             with Image.open(io.BytesIO(data)) as img:
                 width, height = img.size
                 if width < 300 or height < 300:
@@ -473,34 +448,13 @@ class PinterestScraper:
 
 
 # -----------------------------------------------------------------------------
-# DISCORD WEBHOOK CLIENT
+# DISCORD WEBHOOK CLIENT (PURE IMAGE ONLY - NO EMBEDS)
 # -----------------------------------------------------------------------------
 class DiscordPoster:
-    """Handles sending rich embedded messages with attached image files to Discord Webhooks."""
+    """Handles sending pure, clean image files directly to Discord Webhooks (no embeds)."""
 
-    STOIC_ARCHETYPES = [
-        "DAILY DISCIPLINE // REFLECTION",
-        "MEMENTO MORI // UNYIELDING WILL",
-        "RAW GRINDSET // NO EXCUSES",
-        "STOIC ORDER // EXECUTION",
-        "THE WAR WITHIN // RELENTLESS FOCUS",
-        "IRON MINDSET // DISCIPLINE OVER MOOD",
-    ]
-
-    STOIC_CAPTIONS = [
-        "\"You have power over your mind - not outside events. Realize this, and you will find strength.\" - Marcus Aurelius",
-        "\"We suffer more often in imagination than in reality.\" - Seneca",
-        "\"No man is free who is not master of himself.\" - Epictetus",
-        "\"To be ballin, you gotta b-all-in. No plan B. Only execution.\"",
-        "\"Suffer the pain of discipline or suffer the pain of regret.\"",
-        "\"The impediment to action advances action. What stands in the way becomes the way.\" - Marcus Aurelius",
-        "\"Discipline is choosing between what you want now and what you want most.\"",
-        "\"Waste no more time arguing what a good man should be. Be one.\" - Marcus Aurelius",
-    ]
-
-    def __init__(self, webhook_url: str, embed_color: int, bot_username: str, session: aiohttp.ClientSession):
+    def __init__(self, webhook_url: str, bot_username: str, session: aiohttp.ClientSession):
         self.webhook_url = webhook_url
-        self.embed_color = embed_color
         self.bot_username = bot_username
         self.session = session
 
@@ -508,54 +462,19 @@ class DiscordPoster:
         self,
         image_bytes: bytes,
         source_url: str,
-        pin_title: str,
-        query: str,
-        timezone_str: str,
     ) -> bool:
         """
-        Sends the stoic quote image directly as a multipart file upload attached
-        to a rich Discord embed, guaranteeing zero broken CDN links.
+        Sends the pure quote image directly as a multipart file upload.
+        NO EMBEDS, NO TITLES, NO CAPTIONS - only the raw full-resolution image.
         Retries up to 5 times with exponential backoff on rate limits.
         """
-        now = datetime.now(ZoneInfo(timezone_str))
-        time_display = now.strftime("%A, %B %d • %H:%M %Z")
-
-        # Pick random thematic caption and header
-        title_header = random.choice(self.STOIC_ARCHETYPES)
-        caption = random.choice(self.STOIC_CAPTIONS)
-
-        # Build clean matte dark embed payload
-        embed = {
-            "title": f"⚔️  {title_header}",
-            "description": f"*{caption}*\n\n`Focus:` `{query.upper()}`",
-            "color": self.embed_color,
-            "image": {
-                "url": "attachment://stoic_quote.jpg"
-            },
-            "footer": {
-                "text": f"Daily Grit • {time_display} • No Plan B",
-            },
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }
-
         payload_json = {
             "username": self.bot_username,
-            "embeds": [embed],
         }
 
-        # Formulate multipart request
         form = aiohttp.FormData()
-        form.add_field(
-            "payload_json",
-            json.dumps(payload_json),
-            content_type="application/json",
-        )
-        form.add_field(
-            "file",
-            image_bytes,
-            filename="stoic_quote.jpg",
-            content_type="image/jpeg",
-        )
+        form.add_field("payload_json", json.dumps(payload_json), content_type="application/json")
+        form.add_field("file", image_bytes, filename="quote.jpg", content_type="image/jpeg")
 
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(5),
@@ -564,17 +483,16 @@ class DiscordPoster:
             reraise=True,
         ):
             with attempt:
-                logger.info(f"Posting quote image to Discord (Attempt {attempt.retry_state.attempt_number}/5)...")
+                logger.info(f"Posting pure quote image to Discord (Attempt {attempt.retry_state.attempt_number}/5)...")
                 async with self.session.post(
                     self.webhook_url,
                     data=form,
                     timeout=aiohttp.ClientTimeout(total=20),
                 ) as resp:
                     if resp.status in (200, 204):
-                        logger.info("Successfully posted stoic quote to Discord channel!")
+                        logger.info("Successfully posted pure quote image to Discord channel!")
                         return True
                     elif resp.status == 429:
-                        # Rate limited by Discord
                         retry_after = 5.0
                         try:
                             rate_limit_info = await resp.json()
@@ -614,7 +532,6 @@ class StoicBotService:
             scraper = PinterestScraper(session)
             poster = DiscordPoster(
                 webhook_url=self.config.webhook_url,
-                embed_color=self.config.embed_color,
                 bot_username=self.config.bot_username,
                 session=session,
             )
@@ -632,13 +549,10 @@ class StoicBotService:
             image_bytes, img_url, title, query_used = quote_data
             img_hash = hashlib.sha256(image_bytes).hexdigest()
 
-            # 2. Dispatch to Discord
+            # 2. Dispatch pure image to Discord (NO embeds)
             success = await poster.post_image(
                 image_bytes=image_bytes,
                 source_url=img_url,
-                pin_title=title,
-                query=query_used,
-                timezone_str=self.config.timezone_str,
             )
 
             if success:
@@ -670,7 +584,7 @@ class StoicBotService:
             id="stoic_daily_quote_job",
             name=f"Daily Quote at {self.config.post_time_str} {self.config.timezone_str}",
             replace_existing=True,
-            misfire_grace_time=3600,  # 1 hour grace period if system was briefly asleep
+            misfire_grace_time=3600,
         )
 
         self.scheduler.start()
@@ -685,13 +599,11 @@ class StoicBotService:
         self._is_running = True
         self.start_scheduler()
 
-        # Register termination signal listeners (POSIX systems)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
             except NotImplementedError:
-                # Windows event loop does not support add_signal_handler
                 pass
 
         try:
@@ -741,7 +653,6 @@ async def main_async():
     args = parse_arguments()
     config = Config()
 
-    # Handle --stats
     if args.stats:
         db = Database(config.db_path)
         stats = db.get_stats()
@@ -753,7 +664,6 @@ async def main_async():
         print("------------------------------\n")
         return
 
-    # Handle --test-scrape
     if args.test_scrape:
         logger.info("Running test scrape against Pinterest...")
         db = Database(config.db_path)
@@ -772,7 +682,6 @@ async def main_async():
                 print("\n[ERROR] Could not extract any valid image.\n")
         return
 
-    # Validate Discord Webhook for active posting modes
     try:
         config.validate_for_posting()
     except ValueError as e:
@@ -781,7 +690,6 @@ async def main_async():
 
     service = StoicBotService(config)
 
-    # Handle --post-now
     if args.post_now:
         logger.info("Manual trigger (--post-now) activated. Executing routine immediately...")
         success = await service.execute_daily_routine()
@@ -791,7 +699,6 @@ async def main_async():
             logger.error("Immediate post failed.")
         return
 
-    # Default: Run 24/7 background scheduler
     logger.info("Starting Stoic Bot 24/7 Daemon...")
     await service.run_forever()
 
