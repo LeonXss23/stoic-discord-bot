@@ -10,12 +10,12 @@ Description:
     at 10:00 AM Europe/Ljubljana time.
 
 Features:
-    - 100% Hand-Curated Aesthetic Pool: Only authentic, top-tier quotes.
+    - 100% Hand-Curated Aesthetic Pool: ONLY your exact 26 pins.
     - Pure Image Posting: Zero embeds, zero text clutter, full resolution.
     - Zero Duplicates: SQLite database stores SHA-256 binary hashes.
     - Accurate Timezone & DST handling (Europe/Ljubljana).
     - Exponential backoff retry logic on network/webhook errors.
-    - CLI tools: --post-now, --test-scrape, --stats.
+    - CLI tools: --post-now, --stats.
 ===============================================================================
 """
 
@@ -66,15 +66,15 @@ logger = logging.getLogger("StoicBot")
 
 
 # -----------------------------------------------------------------------------
-# CURATED IMAGE POOL (Handpicked Stoic & Grindset Aesthetics)
+# EXACT CURATED IMAGE POOL (Strictly your 26 pin URLs)
 # -----------------------------------------------------------------------------
 CURATED_IMAGE_POOL = [
     "https://i.pinimg.com/736x/fd/35/4b/fd354be4931c74f0d8233df280e3c5bd.jpg",
     "https://i.pinimg.com/736x/20/52/3a/20523a2e53de5d996f2605f3ee77d598.jpg",
-    "https://i.pinimg.com/736x/d8/8b/a6/d88ba6aecafc79808d04f6a47961434d.jpg",
+    "https://i.pinimg.com/originals/d8/8b/a6/d88ba6aecafc79808d04f6a47961434d.jpg",
     "https://i.pinimg.com/736x/dd/b4/73/ddb4739ea789f23e9e543cceb5e1d329.jpg",
     "https://i.pinimg.com/736x/44/d0/56/44d056e5e45338fd44a875e20c7163c9.jpg",
-    "https://i.pinimg.com/736x/85/d7/91/85d791ed740af8139d8f456f9c53c8b7.jpg",
+    "https://i.pinimg.com/originals/85/d7/91/85d791ed740af8139d8f456f9c53c8b7.jpg",
     "https://i.pinimg.com/736x/eb/23/66/eb23661f64fc68b11ddfd8443186da45.jpg",
     "https://i.pinimg.com/736x/e2/7c/f6/e27cf6da9791772259330e96bd547057.jpg",
     "https://i.pinimg.com/736x/b0/71/22/b0712279920e9f44e9ed17c90809df65.jpg",
@@ -95,12 +95,6 @@ CURATED_IMAGE_POOL = [
     "https://i.pinimg.com/736x/72/0d/0d/720d0d503c8e6eabae21db4b151e73f7.jpg",
     "https://i.pinimg.com/736x/39/80/a3/3980a39f06e2ecc67d39507d2398e523.jpg",
     "https://i.pinimg.com/736x/70/43/86/7043863d46d24752727796771368e474.jpg",
-    "https://i.pinimg.com/736x/f6/30/c8/f630c84b952f8118f571c79a5695f041.jpg",
-    "https://i.pinimg.com/736x/92/aa/85/92aa85e655e2dad5ac281847bae6c963.jpg",
-    "https://i.pinimg.com/736x/ec/3f/47/ec3f47aa3b7b2269797940d308e4d2d3.jpg",
-    "https://i.pinimg.com/736x/71/a9/a8/71a9a8317439e7baac2df1003ae78f71.jpg",
-    "https://i.pinimg.com/736x/9a/30/91/9a3091879e21624471dc3b95b9c1fcfc.jpg",
-    "https://i.pinimg.com/736x/25/b0/fc/25b0fc0fe7eaccd0e521a36f08e2586f.jpg",
 ]
 
 
@@ -244,7 +238,7 @@ class Database:
 # IMAGE FETCHER & VALIDATOR
 # -----------------------------------------------------------------------------
 class ImageFetcher:
-    """Fetches, validates and deduplicates images from the curated pool."""
+    """Fetches, validates and deduplicates images strictly from the curated pool."""
 
     USER_AGENTS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
