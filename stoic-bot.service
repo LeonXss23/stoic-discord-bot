@@ -1,0 +1,25 @@
+[Unit]
+Description=Stoic & Grindset Discord Daily Quote Bot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# Change WorkingDirectory and ExecStart to your actual deployment path and virtualenv
+WorkingDirectory=/opt/stoic-discord-bot
+ExecStart=/opt/stoic-discord-bot/venv/bin/python /opt/stoic-discord-bot/bot.py
+Restart=always
+RestartSec=10s
+
+# Environment variables
+EnvironmentFile=/opt/stoic-discord-bot/.env
+StandardOutput=journal
+StandardError=journal
+
+# Sandboxing and security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

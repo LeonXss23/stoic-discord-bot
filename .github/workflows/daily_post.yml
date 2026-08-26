@@ -1,0 +1,45 @@
+name: Daily Stoic Discord Quote
+
+on:
+  schedule:
+    # 08:00 UTC = 10:00 AM Europe/Ljubljana (Summer / CEST)
+    # (In Winter / CET, 08:00 UTC is 09:00 AM, or 09:00 UTC is 10:00 AM)
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allows 1-click manual trigger from GitHub UI anytime
+
+permissions:
+  contents: write
+
+jobs:
+  post-quote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Stoic Quote Post
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          POST_TIME: "10:00"
+          TIMEZONE: "Europe/Ljubljana"
+        run: |
+          python bot.py --post-now
+
+      - name: Save & Commit History Database
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add history.db
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update deduplication history [skip ci]"
+          git push

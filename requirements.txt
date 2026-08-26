@@ -1,0 +1,18 @@
+# Core Discord and HTTP client
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# Scheduling & Timezone
+APScheduler>=3.10.4
+tzdata>=2024.1
+
+# HTML Parsing & Scraping
+beautifulsoup4>=4.12.3
+lxml>=5.1.0
+
+# Configuration & Resilience
+python-dotenv>=1.0.1
+tenacity>=8.2.3
+
+# Image processing & Hashing
+Pillow>=10.2.0

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  stoic-bot:
+    build: .
+    container_name: stoic-discord-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/history.db
+      - TZ=Europe/Ljubljana
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
