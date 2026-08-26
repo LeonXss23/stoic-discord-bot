@@ -97,7 +97,7 @@ class Config:
         self.timezone_str: str = os.getenv("TIMEZONE", "Europe/Ljubljana").strip()
         self.db_path: str = os.getenv("DATABASE_PATH", "history.db").strip()
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO").upper().strip()
-        self.bot_username: str = os.getenv("BOT_USERNAME", "STOIC // DAILY GRIND").strip()
+        self.bot_username: str = os.getenv("BOT_USERNAME", "").strip()
 
         # Search queries for raw cardboard signs, street signs & stoic grit
         raw_queries = os.getenv("SEARCH_QUERIES", self.DEFAULT_QUERIES)
@@ -468,12 +468,13 @@ class DiscordPoster:
         NO EMBEDS, NO TITLES, NO CAPTIONS - only the raw full-resolution image.
         Retries up to 5 times with exponential backoff on rate limits.
         """
-        payload_json = {
-            "username": self.bot_username,
-        }
-
         form = aiohttp.FormData()
-        form.add_field("payload_json", json.dumps(payload_json), content_type="application/json")
+        if self.bot_username:
+            form.add_field(
+                "payload_json",
+                json.dumps({"username": self.bot_username}),
+                content_type="application/json",
+            )
         form.add_field("file", image_bytes, filename="quote.jpg", content_type="image/jpeg")
 
         async for attempt in AsyncRetrying(
